@@ -31,6 +31,18 @@ class ChatPageState extends State<ChatPage> {
     "Hi welcome to city hospital, how can I help you today?",
   ];
 
+  Future<String> sendChatMessage(String message) async {
+    var response = await http.post(
+      Uri.parse("http://127.0.0.1:8000/chat"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"message": message}),
+    );
+
+    var data = jsonDecode(response.body);
+
+    return data["response"];
+  }
+
   Future<List<Doctor>> getDoctors() async {
     var response = await http.get(Uri.parse("http://127.0.0.1:8000/doctors"));
     var data = jsonDecode(response.body);

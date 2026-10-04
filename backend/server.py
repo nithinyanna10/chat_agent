@@ -1,6 +1,10 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from openai import OpenAI
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
@@ -20,10 +24,37 @@ class AppointmentRequest(BaseModel):
     time: str
     patientName: str
 
+class ChatRequest(BaseModel):
+    message:str 
+
+@app.post("/chat")
+def chat(request: ChatRequest):
+
+    response = client.responses.create(
+        model="gpt-4o-mini",
+        input=[
+            {
+                "role": "system",
+                "content": (
+                    "You are the receptionist for City Hospital. "
+                    "Be friendly, concise, and helpful."
+                ),
+            },
+            {
+                "role": "user",
+                "content": request.message,
+            },
+        ],
+    )
+
+    return {
+        "response": response.output_text
+    }
 
 @app.get("/")
 def home():
     return {"message": "Hospital backend is running"}
+
 
 
 @app.get("/doctors")
