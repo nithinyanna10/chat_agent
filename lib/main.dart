@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+import 'dart:convert';
 
 import 'doctor.dart';
-
-import 'appointment.dart';
 
 void main() {
   runApp(MaterialApp(home: ChatPage()));
@@ -17,126 +18,181 @@ class ChatPage extends StatefulWidget {
 
 class ChatPageState extends State<ChatPage> {
   TextEditingController controller = TextEditingController();
+
   String patientName = "";
   String phoneNumber = "";
-
-  List<String> messages = [
-    "Hi welcome to city hospital, how can I help you today?",
-  ];
-
-  List<Doctor> doctors = [
-    Doctor(
-      name: "Dr. Smith",
-      specialty: "Cardiology",
-      startTime: "9 AM",
-      endTime: "3 PM",
-    ),
-    Doctor(
-      name: "Dr. Brown",
-      specialty: "Dermatology",
-      startTime: "10 AM",
-      endTime: "4 PM",
-    ),
-    Doctor(
-      name: "Dr. Jones",
-      specialty: "Pediatrics",
-      startTime: "8 AM",
-      endTime: "2 PM",
-    ),
-    Doctor(
-      name: "Dr. Wilson",
-      specialty: "General Medicine",
-      startTime: "9 AM",
-      endTime: "5 PM",
-    ),
-  ];
-
-  List<Appointment> appointments = [
-    Appointment(
-      doctorName: "Dr. Smith",
-      date: "October 10",
-      time: "10 AM",
-      patientName: "John",
-    ),
-    Appointment(
-      doctorName: "Dr. Smith",
-      date: "October 10",
-      time: "11 AM",
-      patientName: "Sarah",
-    ),
-  ];
-
-  bool isAvailable(String doctorName, String date, String time) {
-    for (Appointment appointment in appointments) {
-      if (appointment.doctorName == doctorName &&
-          appointment.date == date &&
-          appointment.time == time) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   String selectedDoctor = "";
   String selectedDate = "";
 
   int step = 0;
 
-  void sendMessage() {
+  List<String> messages = [
+    "Hi welcome to city hospital, how can I help you today?",
+  ];
+
+  Future<List<Doctor>> getDoctors() async {
+    var response = await http.get(Uri.parse("http://127.0.0.1:8000/doctors"));
+    var data = jsonDecode(response.body);
+    List<Doctor> doctors = [];
+
+    for (var doctor in data["doctors"]) {
+      doctors.add(
+        Doctor(
+          name: doctor["name"],
+          specialty: doctor["specialty"],
+          startTime: doctor["startTime"] ?? "",
+          endTime: doctor["endTime"] ?? "",
+        ),
+      );
+    }
+
+    return doctors;
+  }
+
+  Future<bool> bookAppointment(
+    String doctor,
+    String date,
+    String time,
+    String patientname,
+  ) async {
+    var response = await http.post(
+      Uri.parse("http://127.0.0.1:8000/appointments"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "doctorName": doctor,
+        "date": date,
+        "time": time,
+        "patientName": patientname,
+      }),
+    );
+
+    print(response.body);
+
+    return response.body.contains('"success":true');
+  }
+
+  Future<bool> checkAvailability(
+    String doctor,
+    String date,
+    String time,
+  ) async {
+    var response = await http.get(
+      Uri.parse(
+        "http://127.0.0.1:8000/availability"
+        "?doctor=${Uri.encodeComponent(doctor)}"
+        "&date=${Uri.encodeComponent(date)}"
+        "&time=${Uri.encodeComponent(time)}",
+      ),
+    );
+
+    print(response.body);
+
+    return response.body.contains('"available":true');
+  }
+
+  Future<void> sendMessage() async {
     String userMessage = controller.text;
-    // print(isAvailable("Dr. Smith", "October 10", "10 AM"));
-    // print(isAvailable("Dr. Smith", "October 10", "12 PM"));
-    setState(() {
+
+    // talk to the backend.
+    if (step == 5) {
       messages.add("You: " + userMessage);
 
-      if (step == 0) {
-        patientName = userMessage;
-        messages.add("Receptionist:Nice to meet you what is your phone number");
-        step = 1;
-      } else if (step == 1) {
-        phoneNumber = userMessage;
-        messages.add(
-          "Receptionist: Thanks! What type of doctor would you like to see?",
+      bool available = await checkAvailability(
+        selectedDoctor,
+        selectedDate,
+        userMessage,
+      );
+
+      bool booked = false;
+
+      if (available) {
+        booked = await bookAppointment(
+          selectedDoctor,
+          selectedDate,
+          userMessage,
+          patientName,
         );
-        step = 2;
-      } else if (step == 2) {
-        messages.add("receptionist  : here are our doctors:");
-        for (Doctor doctor in doctors) {
-          messages.add(
-            "${doctor.name}-${doctor.specialty}-${doctor.startTime} to ${doctor.endTime}",
-          );
-        }
-        step = 3;
-      } else if (step == 3) {
-        selectedDoctor = userMessage;
-        messages.add(
-          "receptionist:great choice what day would you like the appointment?",
-        );
-        step = 4;
-      } else if (step == 4) {
-        selectedDate = userMessage;
-        messages.add("receptionsit:what time would you prefer?");
-        step = 5;
-      } else if (step == 5) {
-        bool available = isAvailable(selectedDoctor, selectedDate, userMessage);
-        if (available) {
-          appointments.add(
-            Appointment(
-              doctorName: selectedDoctor,
-              date: selectedDate,
-              time: userMessage,
-              patientName: patientName,
-            ),
-          );
+      }
+
+      setState(() {
+        if (booked) {
           messages.add(
             "Receptionist: Perfect. Your appointment request has been recorded.",
           );
         } else {
           messages.add("Receptionist: Sorry, that time is already booked.");
         }
+
         step = 6;
+      });
+
+      controller.clear();
+
+      return;
+    }
+
+    // STEP 2 is special because we are getting doctors from the backend.
+    if (step == 2) {
+      messages.add("You: " + userMessage);
+
+      List<Doctor> doctors = await getDoctors();
+
+      setState(() {
+        messages.add("Receptionist: Here are our doctors:");
+
+        for (Doctor doctor in doctors) {
+          messages.add(
+            "${doctor.name} - ${doctor.specialty} - "
+            "${doctor.startTime} to ${doctor.endTime}",
+          );
+        }
+
+        step = 3;
+      });
+
+      controller.clear();
+
+      return;
+    }
+
+    // All the normal conversation steps.
+    setState(() {
+      messages.add("You: " + userMessage);
+
+      if (step == 0) {
+        patientName = userMessage;
+
+        messages.add(
+          "Receptionist: Nice to meet you. What is your phone number?",
+        );
+
+        step = 1;
+      } else if (step == 1) {
+        phoneNumber = userMessage;
+
+        messages.add(
+          "Receptionist: Thanks! What type of doctor would you like to see?",
+        );
+
+        step = 2;
+      } else if (step == 3) {
+        selectedDoctor = userMessage;
+
+        messages.add(
+          "Receptionist: Great choice. What day would you like the appointment?",
+        );
+
+        step = 4;
+      } else if (step == 4) {
+        selectedDate = userMessage;
+
+        messages.add("Receptionist: What time would you prefer?");
+
+        step = 5;
       }
     });
+
     controller.clear();
   }
 
@@ -146,8 +202,11 @@ class ChatPageState extends State<ChatPage> {
       body: Column(
         children: [
           Text("Virtual Assistant"),
+
           Text(messages.join("\n")),
+
           TextField(controller: controller),
+
           ElevatedButton(onPressed: sendMessage, child: Text("SEND")),
         ],
       ),
