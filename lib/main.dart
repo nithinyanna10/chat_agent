@@ -106,107 +106,127 @@ class ChatPageState extends State<ChatPage> {
   Future<void> sendMessage() async {
     String userMessage = controller.text;
 
-    // talk to the backend.
-    if (step == 5) {
-      messages.add("You: " + userMessage);
-
-      bool available = await checkAvailability(
-        selectedDoctor,
-        selectedDate,
-        userMessage,
-      );
-
-      bool booked = false;
-
-      if (available) {
-        booked = await bookAppointment(
-          selectedDoctor,
-          selectedDate,
-          userMessage,
-          patientName,
-        );
-      }
-
-      setState(() {
-        if (booked) {
-          messages.add(
-            "Receptionist: Perfect. Your appointment request has been recorded.",
-          );
-        } else {
-          messages.add("Receptionist: Sorry, that time is already booked.");
-        }
-
-        step = 6;
-      });
-
-      controller.clear();
-
+    if (userMessage.isEmpty) {
       return;
     }
 
-    // STEP 2 is special because we are getting doctors from the backend.
-    if (step == 2) {
-      messages.add("You: " + userMessage);
-
-      List<Doctor> doctors = await getDoctors();
-
-      setState(() {
-        messages.add("Receptionist: Here are our doctors:");
-
-        for (Doctor doctor in doctors) {
-          messages.add(
-            "${doctor.name} - ${doctor.specialty} - "
-            "${doctor.startTime} to ${doctor.endTime}",
-          );
-        }
-
-        step = 3;
-      });
-
-      controller.clear();
-
-      return;
-    }
-
-    // All the normal conversation steps.
     setState(() {
       messages.add("You: " + userMessage);
-
-      if (step == 0) {
-        patientName = userMessage;
-
-        messages.add(
-          "Receptionist: Nice to meet you. What is your phone number?",
-        );
-
-        step = 1;
-      } else if (step == 1) {
-        phoneNumber = userMessage;
-
-        messages.add(
-          "Receptionist: Thanks! What type of doctor would you like to see?",
-        );
-
-        step = 2;
-      } else if (step == 3) {
-        selectedDoctor = userMessage;
-
-        messages.add(
-          "Receptionist: Great choice. What day would you like the appointment?",
-        );
-
-        step = 4;
-      } else if (step == 4) {
-        selectedDate = userMessage;
-
-        messages.add("Receptionist: What time would you prefer?");
-
-        step = 5;
-      }
     });
 
     controller.clear();
+
+    String response = await sendChatMessage(userMessage);
+
+    setState(() {
+      messages.add("Receptionist: " + response);
+    });
   }
+
+  // Future<void> sendMessage() async {
+  //   String userMessage = controller.text;
+
+  //   // talk to the backend.
+  //   if (step == 5) {
+  //     messages.add("You: " + userMessage);
+
+  //     bool available = await checkAvailability(
+  //       selectedDoctor,
+  //       selectedDate,
+  //       userMessage,
+  //     );
+
+  //     bool booked = false;
+
+  //     if (available) {
+  //       booked = await bookAppointment(
+  //         selectedDoctor,
+  //         selectedDate,
+  //         userMessage,
+  //         patientName,
+  //       );
+  //     }
+
+  //     setState(() {
+  //       if (booked) {
+  //         messages.add(
+  //           "Receptionist: Perfect. Your appointment request has been recorded.",
+  //         );
+  //       } else {
+  //         messages.add("Receptionist: Sorry, that time is already booked.");
+  //       }
+
+  //       step = 6;
+  //     });
+
+  //     controller.clear();
+
+  //     return;
+  //   }
+
+  //   // STEP 2 is special because we are getting doctors from the backend.
+  //   if (step == 2) {
+  //     messages.add("You: " + userMessage);
+
+  //     List<Doctor> doctors = await getDoctors();
+
+  //     setState(() {
+  //       messages.add("Receptionist: Here are our doctors:");
+
+  //       for (Doctor doctor in doctors) {
+  //         messages.add(
+  //           "${doctor.name} - ${doctor.specialty} - "
+  //           "${doctor.startTime} to ${doctor.endTime}",
+  //         );
+  //       }
+
+  //       step = 3;
+  //     });
+
+  //     controller.clear();
+
+  //     return;
+  //   }
+
+  //   // All the normal conversation steps.
+  //   setState(() {
+  //     messages.add("You: " + userMessage);
+
+  //     if (step == 0) {
+  //       patientName = userMessage;
+
+  //       messages.add(
+  //         "Receptionist: Nice to meet you. What is your phone number?",
+  //       );
+
+  //       step = 1;
+  //     } else if (step == 1) {
+  //       phoneNumber = userMessage;
+
+  //       messages.add(
+  //         "Receptionist: Thanks! What type of doctor would you like to see?",
+  //       );
+
+  //       step = 2;
+  //     } else if (step == 3) {
+  //       selectedDoctor = userMessage;
+
+  //       messages.add(
+  //         "Receptionist: Great choice. What day would you like the appointment?",
+  //       );
+
+  //       step = 4;
+  //     } else if (step == 4) {
+  //       selectedDate = userMessage;
+
+  //       messages.add("Receptionist: What time would you prefer?");
+
+  //       step = 5;
+  //     }
+  //   });
+
+  //   controller.clear();
+  // }
 
   @override
   Widget build(BuildContext context) {
