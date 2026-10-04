@@ -6,7 +6,59 @@ import 'dart:convert';
 import 'doctor.dart';
 
 void main() {
-  runApp(MaterialApp(home: ChatPage()));
+  runApp(MaterialApp(home: LoginPage()));
+}
+
+class LoginPage extends StatefulWidget {
+  @override
+  State<LoginPage> createState() {
+    return LoginPageState();
+  }
+}
+
+class LoginPageState extends State<LoginPage> {
+  TextEditingController nameController = TextEditingController();
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            "🏥 City Hospital",
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          ),
+
+          SizedBox(height: 10),
+
+          Text("Virtual Receptionist"),
+
+          SizedBox(height: 30),
+
+          Padding(
+            padding: EdgeInsets.all(20),
+            child: TextField(
+              controller: nameController,
+              decoration: InputDecoration(
+                hintText: "Enter your name",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ChatPage()),
+              );
+            },
+            child: Text("Continue"),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class ChatPage extends StatefulWidget {
@@ -233,11 +285,36 @@ class ChatPageState extends State<ChatPage> {
     return Scaffold(
       body: Column(
         children: [
-          Text("Virtual Assistant"),
+          Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              "🏥 City Hospital\nVirtual Receptionist",
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+          ),
 
-          Text(messages.join("\n")),
+          Expanded(
+            child: Container(
+              margin: EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(),
+                borderRadius: BorderRadius.circular(12),
+              ), // for border defnation
+              child: SingleChildScrollView(child: Text(messages.join("\n"))),
+            ),
+          ), // scrolling feature
 
-          TextField(controller: controller),
+          Padding(
+            padding: EdgeInsetsGeometry.symmetric(horizontal: 16),
+            child: TextField(
+              controller: controller,
+              decoration: InputDecoration(
+                hintText: "type a message.....",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
 
           ElevatedButton(onPressed: sendMessage, child: Text("SEND")),
         ],

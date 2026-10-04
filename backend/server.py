@@ -363,6 +363,26 @@ Return:
             print("🔥🔥 TOOL CALLED:", item.name)
             print("🔥 ARGUMENTS:", item.arguments)
 
+            arfuments = json.loads(item.arguments) 
+
+            if iteam.name == "list_doctors":
+                result = list_doctors() 
+            elif iteam.name == "check_doctor_availability":
+                result = check_doctor_availability(
+                    arguments["doctor"],
+                    arguments["date"],
+                    arguments["time"]
+                )
+            elif item.name == "book_doctor_appointment":
+                result = book_doctor_appointment(
+                arguments["doctor"],
+                arguments["date"],
+                arguments["time"],
+                arguments["patient_name"],
+            )
+
+            print("TOOL RESULT:", result)
+
 
     result = json.loads(response.output_text)
     if result["intent"] == "provide_date":
