@@ -27,6 +27,7 @@ class AppointmentRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     message:str 
+    patient_name : str
 
 def is_available(doctor, date, time):
 
@@ -110,6 +111,58 @@ def save_appointment(doctor, date, time, patient_name):
 def list_doctors():
     return doctors
 
+def find_doctor(name):
+    for doctor in doctors:
+        if name.lower() in doctor["name"].lower():
+            return doctor
+
+    return {
+        "error": "Doctor not found"
+    }
+
+def find_doctor_by_specialty(specialty):
+
+    results = []
+
+    for doctor in doctors:
+
+        if doctor["specialty"].lower() == specialty.lower():
+            results.append(doctor)
+
+    return results
+
+def get_available_slots(doctor, date):
+
+    selected_doctor = None
+
+    for d in doctors:
+
+        if d["name"].lower() == doctor.lower():
+            selected_doctor = d
+            break
+
+    if selected_doctor is None:
+        return {
+            "error": "Doctor not found"
+        }
+
+    slots = generate_slots(
+        selected_doctor["startTime"],
+        selected_doctor["endTime"],
+    )
+
+    available_slots = []
+
+    for slot in slots:
+
+        if is_available(
+            doctor,
+            date,
+            slot,
+        ):
+            available_slots.append(slot)
+
+    return available_slots
 def check_doctor_availability(doctor, date, time):
     return is_available(doctor, date, time)
 
@@ -122,7 +175,138 @@ def book_doctor_appointment(doctor, date, time, patient_name):
         patient_name,
     )
 
+def get_patient_appointments(patient_name):
+    result = [] 
 
+    for appointment in appointments:
+        if appointment["patientName"].lower() == patient_name.lower():
+            result.append(appointment)
+    return result
+
+def cancel_appointment(patient_name,doctor,date,time):
+    for appointment in appointments:
+        if (
+            appointment["patientName"].lower() == patient_name.lower()
+            and appointment["doctorName"].lower()==doctor.lower()
+            and appointment["date"].lower() == date.lower() 
+            and appointment["time"].lower() == time.lower()
+        ):
+            appointments.remove(appointment)
+
+            return { 
+                "success" : True,
+                "message" : "appointment cancelled successfully"
+            }
+    return {
+        "success": False,
+        "message": "Appointment not found"
+    }
+
+def reschedule_appointment(patient_name,doctor,old_date,old_time,new_date,new_time):
+    available = check_doctor_availability(
+        doctor,new_date,new_time
+    ) 
+    if not available:
+        return {
+            "success":False,
+            "message":"the nre appointment time is not available"
+        }
+    old_appointment = None 
+
+    for appointment in appointments:
+        if (
+            appointment["patientName"].lower() == patient_name.lower() 
+            and appointment["doctorName"].lower() == doctor.lower()
+            and appointment["date"].lower() == old_date.lower()
+            and appointment["time"].lower() == old_time.lower()
+        ):
+            old_appointment = appointment
+            break
+
+    if old_appointment is None:
+        return {
+            "success": False,
+            "message": "The existing appointment was not found."
+        }
+
+    appointments.remove(old_appointment)
+
+    # Create new appointment
+    appointments.append({
+        "doctorName": doctor,
+        "date": new_date,
+        "time": new_time,
+        "patientName": patient_name,
+    })
+
+    return {
+        "success": True,
+        "message": "Appointment rescheduled successfully",
+        "appointment": {
+            "doctorName": doctor,
+            "date": new_date,
+            "time": new_time,
+            "patientName": patient_name,
+        }
+    }
+# its not a tool call its a helper function
+def parse_time(time_string):
+
+    parts = time_string.split()
+
+    time = parts[0]
+    period = parts[1].upper()
+
+    hour, minute = time.split(":") if ":" in time else (time, "0")
+
+    hour = int(hour)
+    minute = int(minute)
+
+    if period == "PM" and hour != 12:
+        hour += 12
+
+    if period == "AM" and hour == 12:
+        hour = 0
+
+    return hour * 60 + minute
+
+def generate_slots(start_time, end_time):
+
+    start = parse_time(start_time)
+    end = parse_time(end_time)
+
+    slots = []
+
+    current = start
+
+    while current < end:
+
+        hour = current // 60
+        minute = current % 60
+
+        period = "AM"
+
+        if hour >= 12:
+            period = "PM"
+
+        display_hour = hour
+
+        if hour > 12:
+            display_hour = hour - 12
+
+        if hour == 0:
+            display_hour = 12
+
+        if minute == 0:
+            time_string = f"{display_hour} {period}"
+        else:
+            time_string = f"{display_hour}:30 {period}"
+
+        slots.append(time_string)
+
+        current += 30
+
+    return slots
 
 tools = [
     {
@@ -138,7 +322,7 @@ tools = [
     {
         "type": "function",
         "name": "check_doctor_availability",
-        "description": "Check whether a doctor is available at a specific date and time.",
+        "description": "Check whether a specific doctor is available on a specific date and time. Use this tool when the user provides a doctor, date, and time.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -157,6 +341,7 @@ tools = [
             },
             "required": ["doctor", "date", "time"],
         },
+        "additionalProperties":False 
     },
     {
         "type": "function",
@@ -186,140 +371,196 @@ tools = [
             ],
         },
     },
+    {
+    "type": "function",
+    "name": "find_doctor",
+    "description": "Find a specific doctor by name.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "The doctor's name, such as Smith or Dr. Smith"
+            }
+        },
+        "required": ["name"],
+        "additionalProperties": False
+    }
+},
+    {
+    "type": "function",
+    "name": "get_patient_appointments",
+    "description": "Get all appointments booked for the current patient.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "patient_name": {
+                "type": "string",
+                "description": "The patient's name"
+            }
+        },
+        "required": ["patient_name"],
+        "additionalProperties": False
+    }
+},
+{
+    "type": "function",
+    "name": "find_doctor_by_specialty",
+    "description": "Find doctors who specialize in a specific medical specialty.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "specialty": {
+                "type": "string",
+                "description": "Medical specialty, such as Cardiology, Dermatology, Pediatrics, or General Medicine"
+            }
+        },
+        "required": ["specialty"],
+        "additionalProperties": False
+    }
+},
+{
+    "type": "function",
+    "name": "get_available_slots",
+    "description": "Get available appointment times for a doctor on a specific date.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "doctor": {
+                "type": "string",
+                "description": "Doctor's name"
+            },
+            "date": {
+                "type": "string",
+                "description": "Appointment date"
+            }
+        },
+        "required": [
+            "doctor",
+            "date"
+        ],
+        "additionalProperties": False
+    }
+},
 ]
-
 
 @app.post("/chat")
 def chat(request: ChatRequest):
+
+    print(" USER:", request.message)
+
+    # Save user's message
     messages.append({
-        "role":"user" ,
-        "content":request.message
+        "role": "user",
+        "content": request.message,
     })
 
+    system_prompt = f"""
+You are the virtual receptionist for City Hospital.
 
+The current patient's name is {request.patient_name}.
 
+You help patients:
+- find doctors
+- list doctors
+- check appointment availability
+- book appointments
 
-    response = client.responses.create( 
-        tools = tools,
+Use the available tools whenever you need hospital information.
+
+If the user asks for a list of doctors, use list_doctors.
+
+If the user asks for a specific doctor, use find_doctor.
+
+If the user provides a doctor, date, and time, use check_doctor_availability.
+
+If the user asks about their appointments, use get_patient_appointments
+with the current patient's name.
+
+If the user wants to cancel an appointment, use cancel_appointment.
+
+Before cancelling, make sure you know the doctor, date, and time.
+
+Never cancel an appointment belonging to another patient.
+
+If the user asks for a doctor based on a medical specialty,
+use find_doctor_by_specialty.
+
+For example:
+"I need a heart doctor" means Cardiology.
+"I need a skin doctor" means Dermatology.
+"I need a doctor for my child" means Pediatrics.
+
+If the user asks what times are available for a doctor on a particular date,
+use get_available_slots.
+
+For example:
+
+"Can I see Dr. Smith tomorrow?"
+"Do you have any times available with Dr. Smith on October 10?"
+
+Use get_available_slots instead of checking one specific time.
+
+IMPORTANT BOOKING RULES:
+
+1. Always check availability before booking.
+2. Never book an appointment without checking availability first.
+3. After confirming that a requested time is available, ask the user
+   whether they want to book it.
+4. Only call book_doctor_appointment after the user clearly confirms.
+5. If the user says yes, book the appointment using the doctor, date,
+   and time from the conversation.
+6. If the appointment is unavailable, do not book it.
+7. If information is missing, ask the user for it.
+
+Remember information from earlier messages in the conversation.
+
+Do not invent doctors, working hours, availability, or appointments.
+
+Be conversational and helpful.
+"""
+
+    response = client.responses.create(
         model="gpt-4o-mini",
+        tools=tools,
         input=[
             {
                 "role": "system",
-                "content": """
-You are a hospital receptionist.
-
-Understand what the patient wants.
-
-Return ONLY JSON.
-
-IMPORTANT:
-You have tools available for accessing hospital information.
-
-When the user asks for doctors, use the list_doctors tool.
-When the user asks whether a doctor is available, use check_doctor_availability.
-When the user wants to book an appointment, use book_doctor_appointment.
-
-Do NOT return JSON intents such as {"intent":"list_doctors"}.
-Use the tools directly when appropriate.
-
-Possible intents:
-- find_doctor
-- list_doctors
-- start_booking
-- provide_date
-- provide_time
-- check_availability
-- book_appointment
-- greeting
-- unknown
-- confirm_booking
-- provide_name
-
-If the patient wants a type of doctor, identify the specialty.
-
-Example:
-User: I need a heart doctor
-Return:
-{"intent":"find_doctor","specialty":"Cardiology"}
-
-User: I want to see a skin doctor
-Return:
-{"intent":"find_doctor","specialty":"Dermatology"}
-
-User: hello
-Return:
-{"intent":"greeting","specialty":null}
-
-If the patient gives a day or date, put it in "date".
-
-User: next Monday
-Return:
-{"intent":"provide_date","date":"next Monday"}
-
-User: October 10
-Return:
-{"intent":"provide_date","date":"October 10"}
-
-User: 10 AM
-
-Return:
-{"intent":"provide_time","time":"10 AM"}
-
-User: yes
-
-Return:
-{"intent":"confirm_booking"}
-
-User: show me the list of doctors
-
-Return:
-{"intent":"list_doctors"}
-
-User: I'd like to book an appointment
-
-Return:
-{"intent":"start_booking"}
-
-User: I want to schedule an appointment
-
-Return:
-{"intent":"start_booking"}
-
-User: My name is John
-
-Return:
-{"intent":"provide_name","name":"John"}
-
-User: I'm Sarah
-
-Return:
-{"intent":"provide_name","name":"Sarah"}
-
-"""
+                "content": system_prompt,
             },
-            {
-                "role": "user",
-                "content": """..."""
-            },
-            *messages
-        ]
+            *messages,
+        ],
     )
+
+    print(" FIRST RESPONSE:", response.output)
+
 
     for item in response.output:
 
         if item.type == "function_call":
-            print("tool called",item.name)
-            print("arguments::",item.arguments)
+
+            print(" TOOL CALLED:", item.name)
+            print("ARGUMENTS:", item.arguments)
+
             arguments = json.loads(item.arguments)
 
+
             if item.name == "list_doctors":
-                print("🏥 Running list_doctors()")
+
+                print(" Running list_doctors()")
 
                 result = list_doctors()
+            
+            elif item.name == "find_doctors":
+                print("running find doctors")
+
+                result = find_doctor (
+                    argyments["name"]
+                )
 
             elif item.name == "check_doctor_availability":
-                print("🏥 Running check_doctor_availability()")
 
+                print("Running check_doctor_availability()")
 
                 result = check_doctor_availability(
                     arguments["doctor"],
@@ -329,19 +570,68 @@ Return:
 
             elif item.name == "book_doctor_appointment":
 
+                print(" Running book_doctor_appointment()")
+
                 result = book_doctor_appointment(
                     arguments["doctor"],
                     arguments["date"],
                     arguments["time"],
                     arguments["patient_name"],
                 )
+            
+            elif item.name == "get_patient_appointments":
+                print("running get patient appointment") 
+
+                result = get_patient_appointments(
+                    arguments["patient_name"]
+                )
+            
+            elif item.name == "cancel_apppointment":
+                print("running cancellation") 
+
+                result = cancel_appointment(
+                    arguments["patient_name"],
+                    arguments["doctor"],
+        arguments["date"],
+        arguments["time"],
+                )
+            
+            elif item.name == "find_doctor_by_specialty":
+                print("running find doctor tool") 
+
+                result = find_doctor_by_specialty(arguments["specialty"])
+            
+            elif item.name == "get_available_slots":
+
+                print("running get_available_slots()")
+
+                result = get_available_slots(
+                    arguments["doctor"],
+                    arguments["date"],
+                )
+
+
+            else:
+
+                result = {
+                    "error": "Unknown tool"
+                }
+
+            print(" TOOL RESULT:", result)
 
             response = client.responses.create(
                 model="gpt-4o-mini",
                 tools=tools,
                 input=[
+                    {
+                        "role": "system",
+                        "content": system_prompt,
+                    },
+
                     *messages,
+
                     item,
+
                     {
                         "type": "function_call_output",
                         "call_id": item.call_id,
@@ -350,149 +640,139 @@ Return:
                 ],
             )
 
+            print(" FINAL RESPONSE:", response.output_text)
+
+            messages.append({
+                "role": "assistant",
+                "content": response.output_text,
+            })
+
             return {
                 "response": response.output_text
             }
-            print("🔥 GOT RESPONSE FROM OPENAI")
-    print(response.output)
-
-    for item in response.output:
-        print("🔥 ITEM TYPE:", item.type)
-
-        if item.type == "function_call":
-            print("🔥🔥 TOOL CALLED:", item.name)
-            print("🔥 ARGUMENTS:", item.arguments)
-
-            arfuments = json.loads(item.arguments) 
-
-            if iteam.name == "list_doctors":
-                result = list_doctors() 
-            elif iteam.name == "check_doctor_availability":
-                result = check_doctor_availability(
-                    arguments["doctor"],
-                    arguments["date"],
-                    arguments["time"]
-                )
-            elif item.name == "book_doctor_appointment":
-                result = book_doctor_appointment(
-                arguments["doctor"],
-                arguments["date"],
-                arguments["time"],
-                arguments["patient_name"],
-            )
-
-            print("TOOL RESULT:", result)
 
 
-    result = json.loads(response.output_text)
-    if result["intent"] == "provide_date":
-        conversation["date"] = result["date"] 
+    print("NORMAL RESPONSE:", response.output_text)
 
-        return {
-            "response":"great what time would you like the appointment?"
-        }
-    if result["intent"] == "provide_time":
-
-        conversation["time"] = result["time"]
-
-        available = is_available(
-            conversation["doctor"],
-            conversation["date"],
-            conversation["time"],
-        )
-
-        if available:
-            return {
-                "response": "That time is available. Would you like me to book it?"
-            }
-        else:
-            return {
-                "response": "Sorry, that time is already booked. Would you like another time?"
-            }
-    if result["intent"] == "confirm_booking":
-
-        booked = save_appointment(
-            conversation["doctor"],
-            conversation["date"],
-            conversation["time"],
-            conversation["patientName"],
-        )
-
-        if booked:
-            return {
-                "response": (
-                    f"Perfect! Your appointment with "
-                    f"{conversation['doctor']} on "
-                    f"{conversation['date']} at "
-                    f"{conversation['time']} has been booked."
-                )
-            }
-
-        return {
-            "response": "Sorry, that appointment is no longer available."
-
-        }
-    if result["intent"] == "provide_name":
-
-        conversation["patientName"] = result["name"]
-
-        return {
-            "response": f"Nice to meet you, {result['name']}! How can I help you today?"
-        }
-    
-    if result["intent"] == "list_doctors":
-
-        doctor_list = ""
-
-        for doctor in doctors:
-            doctor_list += (
-                f"{doctor['name']} - "
-                f"{doctor['specialty']} - "
-                f"{doctor['startTime']} to {doctor['endTime']}\n"
-            )
-
-        return {
-            "response": "Here are our doctors:\n" + doctor_list
-        }
-    
-    if result["intent"] == "start_booking":
-
-        return {
-            "response": "Sure! What type of doctor would you like to see?"
-        }
-
-    if result["intent"] == "find_doctor":
-
-        specialty = result["specialty"]
-
-        for doctor in doctors:
-
-            if doctor["specialty"] == specialty:
-                conversation["doctor"] = doctor["name"]
-
-
-                return {
-                    "response": (
-                        f"We have {doctor['name']} in {doctor['specialty']}. "
-                        f"They are available from {doctor['startTime']} "
-                        f"to {doctor['endTime']}. "
-                        "What day would you like an appointment?"
-                    )
-                }
-
-        return {
-            "response": "Sorry, we don't currently have a doctor for that specialty."
-        }
-
-    if result["intent"] == "greeting":
-
-        return {
-            "response": "Hello! Welcome to City Hospital. How can I help you?"
-        }
+    messages.append({
+        "role": "assistant",
+        "content": response.output_text,
+    })
 
     return {
-        "response": "I can help you find a doctor or book an appointment."
+        "response": response.output_text
     }
+
+
+    # result = json.loads(response.output_text)
+    # if result["intent"] == "provide_date":
+    #     conversation["date"] = result["date"] 
+
+    #     return {
+    #         "response":"great what time would you like the appointment?"
+    #     }
+    # if result["intent"] == "provide_time":
+
+    #     conversation["time"] = result["time"]
+
+    #     available = is_available(
+    #         conversation["doctor"],
+    #         conversation["date"],
+    #         conversation["time"],
+    #     )
+
+    #     if available:
+    #         return {
+    #             "response": "That time is available. Would you like me to book it?"
+    #         }
+    #     else:
+    #         return {
+    #             "response": "Sorry, that time is already booked. Would you like another time?"
+    #         }
+    # if result["intent"] == "confirm_booking":
+
+    #     booked = save_appointment(
+    #         conversation["doctor"],
+    #         conversation["date"],
+    #         conversation["time"],
+    #         conversation["patientName"],
+    #     )
+
+    #     if booked:
+    #         return {
+    #             "response": (
+    #                 f"Perfect! Your appointment with "
+    #                 f"{conversation['doctor']} on "
+    #                 f"{conversation['date']} at "
+    #                 f"{conversation['time']} has been booked."
+    #             )
+    #         }
+
+    #     return {
+    #         "response": "Sorry, that appointment is no longer available."
+
+    #     }
+    # if result["intent"] == "provide_name":
+
+    #     conversation["patientName"] = result["name"]
+
+    #     return {
+    #         "response": f"Nice to meet you, {result['name']}! How can I help you today?"
+    #     }
+    
+    # if result["intent"] == "list_doctors":
+
+    #     doctor_list = ""
+
+    #     for doctor in doctors:
+    #         doctor_list += (
+    #             f"{doctor['name']} - "
+    #             f"{doctor['specialty']} - "
+    #             f"{doctor['startTime']} to {doctor['endTime']}\n"
+    #         )
+
+    #     return {
+    #         "response": "Here are our doctors:\n" + doctor_list
+    #     }
+    
+    # if result["intent"] == "start_booking":
+
+    #     return {
+    #         "response": "Sure! What type of doctor would you like to see?"
+    #     }
+
+    # if result["intent"] == "find_doctor":
+
+    #     specialty = result["specialty"]
+
+    #     for doctor in doctors:
+
+    #         if doctor["specialty"] == specialty:
+    #             conversation["doctor"] = doctor["name"]
+
+
+    #             return {
+    #                 "response": (
+    #                     f"We have {doctor['name']} in {doctor['specialty']}. "
+    #                     f"They are available from {doctor['startTime']} "
+    #                     f"to {doctor['endTime']}. "
+    #                     "What day would you like an appointment?"
+    #                 )
+    #             }
+
+    #     return {
+    #         "response": "Sorry, we don't currently have a doctor for that specialty."
+    #     }
+
+    # if result["intent"] == "greeting":
+
+    #     return {
+    #         "response": "Hello! Welcome to City Hospital. How can I help you?"
+    #     }
+
+    # return {
+    #     "response": "I can help you find a doctor or book an appointment."
+    # }
 
 @app.get("/")
 def home():

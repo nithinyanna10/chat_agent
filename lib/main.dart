@@ -5,6 +5,8 @@ import 'dart:convert';
 
 import 'doctor.dart';
 
+import 'chat_message.dart';
+
 void main() {
   runApp(MaterialApp(home: LoginPage()));
 }
@@ -50,7 +52,10 @@ class LoginPageState extends State<LoginPage> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => ChatPage()),
+                MaterialPageRoute(
+                  builder: (context) =>
+                      ChatPage(patientName: nameController.text),
+                ),
               );
             },
             child: Text("Continue"),
@@ -62,6 +67,8 @@ class LoginPageState extends State<LoginPage> {
 }
 
 class ChatPage extends StatefulWidget {
+  final String patientName;
+  ChatPage({required this.patientName});
   @override
   State<ChatPage> createState() {
     return ChatPageState();
@@ -71,6 +78,20 @@ class ChatPage extends StatefulWidget {
 class ChatPageState extends State<ChatPage> {
   TextEditingController controller = TextEditingController();
 
+  List<ChatMessage> messages = [];
+
+  @override
+  void initState() {
+    super.initState();
+
+    messages.add(
+      ChatMessage(
+        text: "Hi ${widget.patientName}, welcome to City Hospital",
+        isUser: false,
+      ),
+    );
+  }
+
   String patientName = "";
   String phoneNumber = "";
 
@@ -79,15 +100,14 @@ class ChatPageState extends State<ChatPage> {
 
   int step = 0;
 
-  List<String> messages = [
-    "Hi welcome to city hospital, how can I help you today?",
-  ];
-
   Future<String> sendChatMessage(String message) async {
     var response = await http.post(
       Uri.parse("http://127.0.0.1:8000/chat"),
       headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"message": message}),
+      body: jsonEncode({
+        "message": message,
+        "patient_name": widget.patientName,
+      }),
     );
 
     var data = jsonDecode(response.body);
@@ -163,7 +183,7 @@ class ChatPageState extends State<ChatPage> {
     }
 
     setState(() {
-      messages.add("You: " + userMessage);
+      messages.add(ChatMessage(text: userMessage, isUser: true));
     });
 
     controller.clear();
@@ -171,7 +191,7 @@ class ChatPageState extends State<ChatPage> {
     String response = await sendChatMessage(userMessage);
 
     setState(() {
-      messages.add("Receptionist: " + response);
+      messages.add(ChatMessage(text: response, isUser: false));
     });
   }
 
@@ -300,10 +320,17 @@ class ChatPageState extends State<ChatPage> {
               decoration: BoxDecoration(
                 border: Border.all(),
                 borderRadius: BorderRadius.circular(12),
-              ), // for border defnation
-              child: SingleChildScrollView(child: Text(messages.join("\n"))),
+              ), // for border and box decoration
+              child: ListView.builder(
+                itemCount: messages.length,
+                itemBuilder: (context, index) {
+                  ChatMessage message = messages[index];
+
+                  return Text(message.text);
+                },
+              ),
             ),
-          ), // scrolling feature
+          ),
 
           Padding(
             padding: EdgeInsetsGeometry.symmetric(horizontal: 16),
