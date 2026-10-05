@@ -18,7 +18,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-appointments = []
+# appointments are saved to a file so they survive server restarts
+APPOINTMENTS_FILE = os.path.join(os.path.dirname(__file__), "appointments.json")
+
+if os.path.exists(APPOINTMENTS_FILE):
+    with open(APPOINTMENTS_FILE) as f:
+        appointments = json.load(f)
+else:
+    appointments = []
+
+
+def save_appointments():
+    with open(APPOINTMENTS_FILE, "w") as f:
+        json.dump(appointments, f, indent=2)
 
 
 class AppointmentRequest(BaseModel):
@@ -108,6 +120,7 @@ def save_appointment(doctor, date, time, patient_name):
         "time": time,
         "patientName": patient_name,
     })
+    save_appointments()
 
     return True
 # tool calls for agent 
@@ -195,6 +208,7 @@ def cancel_appointment(patient_name,doctor,date,time):
             and appointment["time"].lower() == time.lower()
         ):
             appointments.remove(appointment)
+            save_appointments()
 
             return { 
                 "success" : True,
@@ -233,6 +247,7 @@ def reschedule_appointment(patient_name,doctor,old_date,old_time,new_date,new_ti
         }
 
     appointments.remove(old_appointment)
+    save_appointments()
 
     # Create new appointment
     appointments.append({
@@ -241,6 +256,7 @@ def reschedule_appointment(patient_name,doctor,old_date,old_time,new_date,new_ti
         "time": new_time,
         "patientName": patient_name,
     })
+    save_appointments()
 
     return {
         "success": True,
@@ -567,9 +583,18 @@ Be conversational and helpful.
     print(" FIRST RESPONSE:", response.output)
 
 
-    for item in response.output:
+    # the model can call several tools in a row (for example: check
+    # availability, then book), so keep going until it answers with text
+    tool_inputs = []
 
-        if item.type == "function_call":
+    for step in range(5):  # ponytail: max 5 tool rounds per message, raise if real flows need more
+
+        tool_calls = [item for item in response.output if item.type == "function_call"]
+
+        if not tool_calls:
+            break
+
+        for item in tool_calls:
 
             print(" TOOL CALLED:", item.name)
             print("ARGUMENTS:", item.arguments)
@@ -651,58 +676,38 @@ Be conversational and helpful.
 
             print(" TOOL RESULT:", result)
 
-            response = client.responses.create(
-                model="gpt-4o-mini",
-                tools=tools,
-                input=[
-                    {
-                        "role": "system",
-                        "content": system_prompt,
-                    },
-
-                    *messages,
-
-                    item,
-
-                    {
-                        "type": "function_call_output",
-                        "call_id": item.call_id,
-                        "output": json.dumps(result),
-                    },
-                ],
-            )
-
-            print(" FINAL RESPONSE:", response.output_text)
-
-            messages.append({
-                "role": "assistant",
-                "content": response.output_text,
+            tool_inputs.append(item)
+            tool_inputs.append({
+                "type": "function_call_output",
+                "call_id": item.call_id,
+                "output": json.dumps(result),
             })
 
-            speech = client.audio.speech.create(
-                model="gpt-4o-mini-tts",
-                voice="nova",
-                input=response.output_text,
-                speed=1.25,
-            )
+        response = client.responses.create(
+            model="gpt-4o-mini",
+            tools=tools,
+            input=[
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                *messages,
+                *tool_inputs,
+            ],
+        )
 
-            audio_base64 = base64.b64encode(speech.content).decode("utf-8")
+    response_text = response.output_text
 
-            return {
-                "response": response.output_text,
-                "audio": audio_base64,
-            }
+    # never send empty text to text-to-speech (it crashes)
+    if response_text == "":
+        response_text = "Sorry, something went wrong. Could you say that again?"
 
-
-    print("NORMAL RESPONSE:", response.output_text)
+    print(" FINAL RESPONSE:", response_text)
 
     messages.append({
         "role": "assistant",
-        "content": response.output_text,
+        "content": response_text,
     })
-
-    # both outputs at same time to reduce latency 
-    response_text = response.output_text
 
     speech = client.audio.speech.create(
         model="gpt-4o-mini-tts",
@@ -901,6 +906,7 @@ def book_appointment(appointment: AppointmentRequest):
         "time": appointment.time,
         "patientName": appointment.patientName,
     })
+    save_appointments()
 
     return {
         "success": True,

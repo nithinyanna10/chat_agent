@@ -2,7 +2,7 @@
 
 A hospital virtual receptionist. Patients chat (by text or voice, in English or Spanish) to find doctors, check open slots and book appointments.
 
-- **Frontend:** Flutter (web)
+- **Frontend:** Flutter app, runs in Chrome (web) and on the iOS simulator. Login with your name, chat screen, voice input (mic) and voice replies, English/Spanish switch, and a side menu with your profile and booked appointments.
 - **Backend:** Python FastAPI + OpenAI (chat with tool calling, text-to-speech)
 
 ## Run it

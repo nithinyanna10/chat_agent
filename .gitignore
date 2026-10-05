@@ -51,3 +51,4 @@ app.*.map.json
 .venv/
 __pycache__/
 .env
+appointments.json
