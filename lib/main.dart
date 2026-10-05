@@ -11,6 +11,8 @@ import 'doctor.dart';
 import 'chat_message.dart';
 import 'speech_output.dart';
 
+import 'package:audioplayers/audioplayers.dart';
+
 void main() {
   runApp(MaterialApp(home: LoginPage()));
 }
@@ -255,8 +257,9 @@ class ChatPageState extends State<ChatPage> {
   TextEditingController controller = TextEditingController();
 
   List<ChatMessage> messages = [];
+  String selectedLanguage = "English"; // multi language setup
   SpeechInput speechInput = SpeechInput(); // initializing speech input
-  SpeechOutput speechOutput = SpeechOutput(); // initializing speech output
+  AudioPlayer audioPlayer = AudioPlayer(); // spech output
   @override
   void initState() {
     super.initState();
@@ -270,7 +273,7 @@ class ChatPageState extends State<ChatPage> {
     loadAppointments();
   }
 
-  void newChat() {
+  Future<void> newChat() async {
     setState(() {
       messages.clear();
 
@@ -281,6 +284,7 @@ class ChatPageState extends State<ChatPage> {
         ),
       );
     });
+    await speakResponse("Hi ${widget.patientName}, welcome to City Hospital");
   }
 
   Future<void> startListening() async {
@@ -310,19 +314,21 @@ class ChatPageState extends State<ChatPage> {
 
   int step = 0;
 
-  Future<String> sendChatMessage(String message) async {
+  Future<Map<String, dynamic>> sendChatMessage(String message) async {
+    //dynamic is added cause audio is involved
     var response = await http.post(
       Uri.parse("http://127.0.0.1:8000/chat"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
         "message": message,
         "patient_name": widget.patientName,
+        "language": selectedLanguage, // sendin which lang selected to backed so that prompt knows
       }),
     );
 
     var data = jsonDecode(response.body);
 
-    return data["response"];
+    return data;
   }
 
   Future<List<Doctor>> getDoctors() async {
@@ -421,6 +427,20 @@ class ChatPageState extends State<ChatPage> {
     return response.body.contains('"available":true');
   }
 
+  Future<void> speakResponse(String text) async {
+    var response = await http.post(
+      Uri.parse("http://127.0.0.1:8000/speech"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"text": text}),
+    );
+
+    if (response.statusCode == 200) {
+      await audioPlayer.play(
+        BytesSource(response.bodyBytes, mimeType: "audio/mpeg"),
+      );
+    }
+  }
+
   Future<void> sendMessage() async {
     String userMessage = controller.text;
 
@@ -434,13 +454,36 @@ class ChatPageState extends State<ChatPage> {
 
     controller.clear();
 
-    String response = await sendChatMessage(userMessage);
+    // String response = await sendChatMessage(userMessage);
+
+    // setState(() {
+    //   messages.add(ChatMessage(text: response, isUser: false));
+    // });
+    Map<String, dynamic> data = await sendChatMessage(userMessage);
+
+    String response = data["response"];
 
     setState(() {
       messages.add(ChatMessage(text: response, isUser: false));
     });
-    await speechOutput.speak(response);
     await loadAppointments();
+
+    // some replies (tool calls) come back without audio
+    // if (data["audio"] != null) {
+    //   await audioPlayer.play(BytesSource(base64Decode(data["audio"])));
+    // }
+    if (data["audio"] != null) {
+      print("AUDIO RECEIVED");
+      print("Audio length: ${data["audio"].length}");
+
+      await audioPlayer.play(
+        BytesSource(base64Decode(data["audio"]), mimeType: "audio/mpeg"),
+      );
+
+      print("PLAY CALLED");
+    } else {
+      print("NO AUDIO RECEIVED");
+    }
   }
 
   // Future<void> sendMessage() async {
@@ -561,6 +604,20 @@ class ChatPageState extends State<ChatPage> {
         ),
 
         ElevatedButton(onPressed: newChat, child: Text("New Chat")),
+
+        DropdownButton<String>(
+          // user can select spanish or english and converse
+          value: selectedLanguage,
+          items: [
+            DropdownMenuItem(value: "English", child: Text("English")),
+            DropdownMenuItem(value: "Spanish", child: Text("Español")),
+          ],
+          onChanged: (value) {
+            setState(() {
+              selectedLanguage = value!;
+            });
+          },
+        ),
 
         Expanded(
           child: Container(

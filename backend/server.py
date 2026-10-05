@@ -1,5 +1,7 @@
 import os
-from fastapi import FastAPI
+import base64
+from turtle import speed
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
@@ -26,8 +28,9 @@ class AppointmentRequest(BaseModel):
     patientName: str
 
 class ChatRequest(BaseModel):
-    message:str 
+    message:str
     patient_name : str
+    language: str = "English" #comes from frontend 
 
 def is_available(doctor, date, time):
 
@@ -454,9 +457,35 @@ def chat(request: ChatRequest):
         "role": "user",
         "content": request.message,
     })
+#      English                      │             Spanish (type or say this)             │
+#   ├──────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+#   │ Hi                                               │ Hola                                               │
+#   ├──────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+#   │ May I see your doctors list?                     │ ¿Puedo ver la lista de doctores?                   │
+#   ├──────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+#   │ I'd like to book an appointment with this doctor │ Me gustaría reservar una cita con el Dr. [Wilson]  │
+#   ├──────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+#   │ …on this date and time                           │ para el [12 de octubre] a las [10:30 de la mañana] │
+#   ├──────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+#   │ Thanks                                           │ Gracias
+
+    language = request.language # the prompt change for conversing 
+
+    if language == "Spanish":
+        language_instruction = """
+    Respond entirely in Spanish.
+    You are a friendly hospital receptionist.
+    """
+    else:
+        language_instruction = """
+    Respond entirely in English.
+    You are a friendly hospital receptionist.
+    """
 
     system_prompt = f"""
 You are the virtual receptionist for City Hospital.
+
+{language_instruction}
 
 The current patient's name is {request.patient_name}.
 
@@ -512,6 +541,9 @@ IMPORTANT BOOKING RULES:
    and time from the conversation.
 6. If the appointment is unavailable, do not book it.
 7. If information is missing, ask the user for it.
+8.Keep replies to one or two short sentences. Offer a few options, not full lists.
+9. When booking, always use the current patient's name ({request.patient_name})
+   as patient_name. Never ask the patient for their name.
 
 Remember information from earlier messages in the conversation.
 
@@ -551,11 +583,11 @@ Be conversational and helpful.
 
                 result = list_doctors()
             
-            elif item.name == "find_doctors":
-                print("running find doctors")
+            elif item.name == "find_doctor":
+                print("running find doctor")
 
-                result = find_doctor (
-                    argyments["name"]
+                result = find_doctor(
+                    arguments["name"]
                 )
 
             elif item.name == "check_doctor_availability":
@@ -586,7 +618,7 @@ Be conversational and helpful.
                     arguments["patient_name"]
                 )
             
-            elif item.name == "cancel_apppointment":
+            elif item.name == "cancel_appointment":
                 print("running cancellation") 
 
                 result = cancel_appointment(
@@ -647,8 +679,18 @@ Be conversational and helpful.
                 "content": response.output_text,
             })
 
+            speech = client.audio.speech.create(
+                model="gpt-4o-mini-tts",
+                voice="nova",
+                input=response.output_text,
+                speed=1.25,
+            )
+
+            audio_base64 = base64.b64encode(speech.content).decode("utf-8")
+
             return {
-                "response": response.output_text
+                "response": response.output_text,
+                "audio": audio_base64,
             }
 
 
@@ -659,8 +701,21 @@ Be conversational and helpful.
         "content": response.output_text,
     })
 
+    # both outputs at same time to reduce latency 
+    response_text = response.output_text
+
+    speech = client.audio.speech.create(
+        model="gpt-4o-mini-tts",
+        voice="nova",
+        input=response_text,
+        speed=1.25,
+    )
+
+    audio_base64 = base64.b64encode(speech.content).decode("utf-8")
+
     return {
-        "response": response.output_text
+        "response": response_text,
+        "audio": audio_base64,
     }
 
 
@@ -851,3 +906,25 @@ def book_appointment(appointment: AppointmentRequest):
         "success": True,
         "message": "Appointment booked successfully.",
     }
+
+from fastapi.responses import Response 
+
+# for speech model text to speech
+class SpeechRequest(BaseModel):
+    text: str
+
+#  testing with speed endpoint but resulte din delay of voice so moving it chat itself 
+# @app.post("/speech")
+# def speech(request: SpeechRequest):
+
+#     response = client.audio.speech.create(
+#         model="gpt-4o-mini-tts",
+#         voice="nova",
+#         speed = 1.25,
+#         input=request.text,
+#     )
+
+#     return Response(
+#         content=response.content,
+#         media_type="audio/mpeg",
+#     )
