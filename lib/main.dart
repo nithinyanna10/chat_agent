@@ -258,6 +258,7 @@ class ChatPageState extends State<ChatPage> {
 
   List<ChatMessage> messages = [];
   String selectedLanguage = "English"; // multi language setup
+  bool isListening = false;
   SpeechInput speechInput = SpeechInput(); // initializing speech input
   AudioPlayer audioPlayer = AudioPlayer(); // spech output
   @override
@@ -294,6 +295,10 @@ class ChatPageState extends State<ChatPage> {
       return;
     }
 
+    setState(() {
+      isListening = true;
+    });
+
     await speechInput.listen(
       (text) {
         setState(() {
@@ -301,7 +306,11 @@ class ChatPageState extends State<ChatPage> {
         });
       },
       () {
-        sendMessage();
+        setState(() {
+          isListening = false;
+        });
+
+        sendMessage(fromVoice: true);
       },
     );
   }
@@ -441,7 +450,9 @@ class ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> sendMessage() async {
+  // fromVoice is true only when the message came from the mic,
+  // so typed messages get a text reply without voice
+  Future<void> sendMessage({bool fromVoice = false}) async {
     String userMessage = controller.text;
 
     if (userMessage.isEmpty) {
@@ -472,7 +483,7 @@ class ChatPageState extends State<ChatPage> {
     // if (data["audio"] != null) {
     //   await audioPlayer.play(BytesSource(base64Decode(data["audio"])));
     // }
-    if (data["audio"] != null) {
+    if (fromVoice && data["audio"] != null) {
       print("AUDIO RECEIVED");
       print("Audio length: ${data["audio"].length}");
 
@@ -603,20 +614,31 @@ class ChatPageState extends State<ChatPage> {
           ),
         ),
 
-        ElevatedButton(onPressed: newChat, child: Text("New Chat")),
-
-        DropdownButton<String>(
-          // user can select spanish or english and converse
-          value: selectedLanguage,
-          items: [
-            DropdownMenuItem(value: "English", child: Text("English")),
-            DropdownMenuItem(value: "Spanish", child: Text("Español")),
-          ],
-          onChanged: (value) {
-            setState(() {
-              selectedLanguage = value!;
-            });
-          },
+        ElevatedButton.icon(
+          onPressed: newChat,
+          icon: Icon(Icons.add),
+          label: Text("new chat"),
+        ),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: DropdownButton<String>(
+            // user can select spanish or english and converse
+            value: selectedLanguage,
+            underline: SizedBox(),
+            items: [
+              DropdownMenuItem(value: "English", child: Text("English")),
+              DropdownMenuItem(value: "Spanish", child: Text("Español")),
+            ],
+            onChanged: (value) {
+              setState(() {
+                selectedLanguage = value!;
+              });
+            },
+          ),
         ),
 
         Expanded(
@@ -632,8 +654,16 @@ class ChatPageState extends State<ChatPage> {
               itemBuilder: (context, index) {
                 ChatMessage message = messages[index];
 
-                return Text(
-                  "${message.isUser ? 'You: ' : 'Receptionist: '}${message.text}", // for tags in chat for receptionist and you
+                return Align(
+                  alignment: message.isUser
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      "${message.isUser ? 'You: ' : 'Receptionist: '}${message.text}", // for differentiating receptionist and you and also left and right ui change
+                    ),
+                  ),
                 );
               },
             ),
@@ -645,7 +675,6 @@ class ChatPageState extends State<ChatPage> {
           child: TextField(
             controller: controller,
             onSubmitted: (value) {
-              // enables the key board enter for text input
               sendMessage();
             },
             decoration: InputDecoration(
@@ -655,9 +684,21 @@ class ChatPageState extends State<ChatPage> {
           ),
         ),
 
-        IconButton(onPressed: startListening, icon: Icon(Icons.mic)),
+        IconButton(
+          onPressed: startListening,
+          icon: Icon(
+            isListening ? Icons.mic : Icons.mic_none,
+            color: isListening ? Colors.red : Colors.black,
+          ),
+          iconSize: 32,
+          tooltip: isListening ? "Listening..." : "Speak",
+        ), //enhancing icon
 
-        ElevatedButton(onPressed: sendMessage, child: Text("SEND")),
+        ElevatedButton.icon(
+          onPressed: sendMessage,
+          icon: Icon(Icons.send),
+          label: Text("send"),
+        ),
       ],
     );
   }
