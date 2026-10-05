@@ -271,10 +271,18 @@ class ChatPageState extends State<ChatPage> {
         isUser: false,
       ),
     );
+    resetServerChat(); // new login starts with a fresh conversation
     loadAppointments();
   }
 
+  // tells the backend to forget the old conversation
+  Future<void> resetServerChat() async {
+    await http.post(Uri.parse("http://127.0.0.1:8000/reset"));
+  }
+
   Future<void> newChat() async {
+    await resetServerChat();
+
     setState(() {
       messages.clear();
 

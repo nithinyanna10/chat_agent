@@ -560,6 +560,8 @@ IMPORTANT BOOKING RULES:
 8.Keep replies to one or two short sentences. Offer a few options, not full lists.
 9. When booking, always use the current patient's name ({request.patient_name})
    as patient_name. Never ask the patient for their name.
+10. Always call check_doctor_availability or book_doctor_appointment before
+    saying a time is booked or unavailable. Never decide from memory.
 
 Remember information from earlier messages in the conversation.
 
@@ -837,6 +839,13 @@ Be conversational and helpful.
 @app.get("/")
 def home():
     return {"message": "Hospital backend is running"}
+
+
+# forget the conversation it might mix up the bookings 
+@app.post("/reset")
+def reset_chat():
+    messages.clear()
+    return {"success": True}
 
 
 
