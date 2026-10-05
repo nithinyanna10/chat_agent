@@ -5,10 +5,11 @@ import 'appointment.dart';
 
 import 'dart:convert';
 
+import 'speech_input.dart';
 import 'doctor.dart';
 
 import 'chat_message.dart';
-import 'speech_input.dart';
+import 'speech_output.dart';
 
 void main() {
   runApp(MaterialApp(home: LoginPage()));
@@ -255,6 +256,7 @@ class ChatPageState extends State<ChatPage> {
 
   List<ChatMessage> messages = [];
   SpeechInput speechInput = SpeechInput(); // initializing speech input
+  SpeechOutput speechOutput = SpeechOutput(); // initializing speech output
   @override
   void initState() {
     super.initState();
@@ -288,11 +290,16 @@ class ChatPageState extends State<ChatPage> {
       return;
     }
 
-    await speechInput.listen((text) {
-      setState(() {
-        controller.text = text;
-      });
-    });
+    await speechInput.listen(
+      (text) {
+        setState(() {
+          controller.text = text;
+        });
+      },
+      () {
+        sendMessage();
+      },
+    );
   }
 
   String patientName = "";
@@ -432,7 +439,7 @@ class ChatPageState extends State<ChatPage> {
     setState(() {
       messages.add(ChatMessage(text: response, isUser: false));
     });
-
+    await speechOutput.speak(response);
     await loadAppointments();
   }
 
