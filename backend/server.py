@@ -822,6 +822,10 @@ def check_availability(
         "available": is_available(doctor, date, time)
     }
 
+@app.get("/appointments")
+def list_appointments(patient: str):
+    return {"appointments": get_patient_appointments(patient)}
+
 @app.post("/appointments")
 def book_appointment(appointment: AppointmentRequest):
 

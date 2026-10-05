@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'appointment.dart';
+
 import 'dart:convert';
 
 import 'doctor.dart';
 
 import 'chat_message.dart';
+import 'speech_input.dart';
 
 void main() {
   runApp(MaterialApp(home: LoginPage()));
@@ -18,6 +21,24 @@ class LoginPage extends StatefulWidget {
   }
 }
 
+class HeadingHospital extends StatelessWidget {
+  const HeadingHospital({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // final screenWidth = MediaQuery.of(context).size.width;
+    // final isMobile = screenWidth < 600;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.blue,
+      child: const Text(
+        'City Hospital',
+        style: TextStyle(color: Colors.white, fontSize: 24),
+      ),
+    );
+  }
+}
+
 class LoginPageState extends State<LoginPage> {
   TextEditingController nameController = TextEditingController();
   @override
@@ -26,11 +47,7 @@ class LoginPageState extends State<LoginPage> {
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            "🏥 City Hospital",
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-          ),
-
+          const HeadingHospital(),
           SizedBox(height: 10),
 
           Text("Virtual Receptionist"),
@@ -50,11 +67,12 @@ class LoginPageState extends State<LoginPage> {
 
           ElevatedButton(
             onPressed: () {
-              Navigator.push(
+              Navigator.pushReplacement(
+                // for three lines
                 context,
                 MaterialPageRoute(
                   builder: (context) =>
-                      ChatPage(patientName: nameController.text),
+                      HomePage(patientName: nameController.text),
                 ),
               );
             },
@@ -66,9 +84,166 @@ class LoginPageState extends State<LoginPage> {
   }
 }
 
+// inside the side bar it is profile section
+class ProfilePage extends StatelessWidget {
+  final String patientName;
+
+  ProfilePage({required this.patientName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Profile")),
+      body: Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Profile",
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            ),
+
+            SizedBox(height: 20),
+
+            Text("Name", style: TextStyle(fontWeight: FontWeight.bold)),
+
+            SizedBox(height: 5),
+
+            Text(patientName, style: TextStyle(fontSize: 20)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+// step 2 for side bar - appointments display
+
+class AppointmentsPage extends StatelessWidget {
+  final List<Appointment> appointments;
+
+  AppointmentsPage({required this.appointments});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Appointments")),
+      body: Padding(
+        padding: EdgeInsets.all(20),
+        child: appointments.isEmpty
+            ? Text("No appointments")
+            : ListView.builder(
+                itemCount: appointments.length,
+                itemBuilder: (context, index) {
+                  Appointment appointment = appointments[index];
+
+                  return Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            appointment.doctorName,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+
+                          SizedBox(height: 8),
+
+                          Text("Date: ${appointment.date}"),
+                          Text("Time: ${appointment.time}"),
+                          Text("Patient: ${appointment.patientName}"),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+// for side bar firsts step is to test so made it as stateless now changed to stateful
+class HomePage extends StatefulWidget {
+  final String patientName;
+
+  HomePage({required this.patientName});
+
+  @override
+  State<HomePage> createState() {
+    return HomePageState();
+  }
+}
+
+class HomePageState extends State<HomePage> {
+  List<Appointment> appointments = [];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("City Hospital")),
+
+      drawer: Drawer(
+        // FOR SIDE BAR
+        child: ListView(
+          children: [
+            DrawerHeader(
+              child: Text("🏥 City Hospital", style: TextStyle(fontSize: 24)),
+            ),
+
+            ListTile(
+              leading: Icon(Icons.person), // emoji for person
+              title: Text("Profile"),
+              onTap: () {
+                Navigator.pop(context);
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        ProfilePage(patientName: widget.patientName),
+                  ),
+                );
+              },
+            ),
+
+            ListTile(
+              leading: Icon(
+                Icons.calendar_month,
+              ), // emoji for appointments i.e calender
+              title: Text("Appointments"),
+              onTap: () {
+                Navigator.pop(context);
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        AppointmentsPage(appointments: appointments),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+
+      body: ChatPage(
+        patientName: widget.patientName,
+        appointments: appointments,
+      ),
+    );
+  }
+}
+
 class ChatPage extends StatefulWidget {
   final String patientName;
-  ChatPage({required this.patientName});
+  final List<Appointment> appointments;
+  ChatPage({required this.patientName, required this.appointments});
   @override
   State<ChatPage> createState() {
     return ChatPageState();
@@ -79,7 +254,7 @@ class ChatPageState extends State<ChatPage> {
   TextEditingController controller = TextEditingController();
 
   List<ChatMessage> messages = [];
-
+  SpeechInput speechInput = SpeechInput(); // initializing speech input
   @override
   void initState() {
     super.initState();
@@ -90,6 +265,34 @@ class ChatPageState extends State<ChatPage> {
         isUser: false,
       ),
     );
+    loadAppointments();
+  }
+
+  void newChat() {
+    setState(() {
+      messages.clear();
+
+      messages.add(
+        ChatMessage(
+          text: "Hi ${widget.patientName}, welcome to City Hospital",
+          isUser: false,
+        ),
+      );
+    });
+  }
+
+  Future<void> startListening() async {
+    bool ready = await speechInput.initialize();
+    // for start listening initally nothing wait for future until vpoice comes
+    if (!ready) {
+      return;
+    }
+
+    await speechInput.listen((text) {
+      setState(() {
+        controller.text = text;
+      });
+    });
   }
 
   String patientName = "";
@@ -132,6 +335,42 @@ class ChatPageState extends State<ChatPage> {
     }
 
     return doctors;
+  }
+
+  Future<List<Appointment>> getAppointments() async {
+    var response = await http.get(
+      Uri.parse(
+        "http://127.0.0.1:8000/appointments"
+        "?patient=${Uri.encodeComponent(widget.patientName)}",
+      ),
+    );
+
+    var data = jsonDecode(response.body);
+
+    List<Appointment> appointments = [];
+
+    for (var appointment in data["appointments"]) {
+      appointments.add(
+        Appointment(
+          doctorName: appointment["doctorName"],
+          date: appointment["date"],
+          time: appointment["time"],
+          patientName: appointment["patientName"],
+        ),
+      );
+    }
+
+    return appointments;
+  }
+
+  Future<void> loadAppointments() async {
+    List<Appointment> result = await getAppointments();
+    widget.appointments.clear();
+    widget.appointments.addAll(result);
+
+    setState(() {
+      // also fill HomePage's list, so the Appointments page in the menu sees them
+    });
   }
 
   Future<bool> bookAppointment(
@@ -193,6 +432,8 @@ class ChatPageState extends State<ChatPage> {
     setState(() {
       messages.add(ChatMessage(text: response, isUser: false));
     });
+
+    await loadAppointments();
   }
 
   // Future<void> sendMessage() async {
@@ -302,50 +543,58 @@ class ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          Padding(
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            "🏥 City Hospital\nVirtual Receptionist",
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+        ),
+
+        ElevatedButton(onPressed: newChat, child: Text("New Chat")),
+
+        Expanded(
+          child: Container(
+            margin: EdgeInsets.all(16),
             padding: EdgeInsets.all(16),
-            child: Text(
-              "🏥 City Hospital\nVirtual Receptionist",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            decoration: BoxDecoration(
+              border: Border.all(),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ListView.builder(
+              itemCount: messages.length,
+              itemBuilder: (context, index) {
+                ChatMessage message = messages[index];
+
+                return Text(
+                  "${message.isUser ? 'You: ' : 'Receptionist: '}${message.text}", // for tags in chat for receptionist and you
+                );
+              },
             ),
           ),
+        ),
 
-          Expanded(
-            child: Container(
-              margin: EdgeInsets.all(16),
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(),
-                borderRadius: BorderRadius.circular(12),
-              ), // for border and box decoration
-              child: ListView.builder(
-                itemCount: messages.length,
-                itemBuilder: (context, index) {
-                  ChatMessage message = messages[index];
-
-                  return Text(message.text);
-                },
-              ),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: TextField(
+            controller: controller,
+            onSubmitted: (value) {
+              // enables the key board enter for text input
+              sendMessage();
+            },
+            decoration: InputDecoration(
+              hintText: "type a message.....",
+              border: OutlineInputBorder(),
             ),
           ),
+        ),
 
-          Padding(
-            padding: EdgeInsetsGeometry.symmetric(horizontal: 16),
-            child: TextField(
-              controller: controller,
-              decoration: InputDecoration(
-                hintText: "type a message.....",
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
+        IconButton(onPressed: startListening, icon: Icon(Icons.mic)),
 
-          ElevatedButton(onPressed: sendMessage, child: Text("SEND")),
-        ],
-      ),
+        ElevatedButton(onPressed: sendMessage, child: Text("SEND")),
+      ],
     );
   }
 }
