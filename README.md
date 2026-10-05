@@ -1,17 +1,30 @@
 # chat_agent
 
-A new Flutter project.
+A hospital virtual receptionist. Patients chat (by text or voice, in English or Spanish) to find doctors, check open slots and book appointments.
 
-## Getting Started
+- **Frontend:** Flutter (web)
+- **Backend:** Python FastAPI + OpenAI (chat with tool calling, text-to-speech)
 
-This project is a starting point for a Flutter application.
+## Run it
 
-A few resources to get you started if this is your first Flutter project:
+**1. Backend**
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```
+cd backend
+python -m venv .venv
+.venv/bin/pip install fastapi uvicorn openai
+echo 'OPENAI_API_KEY=your-key-here' > .env
+export $(grep OPENAI_API_KEY .env | xargs)
+.venv/bin/uvicorn server:app --reload
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The server runs at http://127.0.0.1:8000.
+
+**2. App** (in a second terminal, from the project root)
+
+```
+flutter pub get
+flutter run -d chrome
+```
+
+Enter your name, then chat. Tap the mic to talk; voice messages get a spoken reply.
